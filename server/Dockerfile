@@ -2,36 +2,20 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files only
 COPY package*.json ./
 
-# Install root dependencies
-RUN npm install
+# Install with verbose output
+RUN npm install --loglevel=verbose
 
-# Copy client package files and install client deps
-COPY client/package*.json ./client/
-WORKDIR /app/client
-RUN npm install
-
-# Go back to app directory
-WORKDIR /app
-
-# Copy source code
-COPY client/ ./client/
-COPY prisma/ ./prisma/
+# Copy rest of files
 COPY src/ ./src/
+COPY prisma/ ./prisma/
 
-# Build client
-WORKDIR /app/client
-RUN npm run build
-
-# Generate Prisma client and run migrations
-WORKDIR /app
+# Generate Prisma client
 RUN npx prisma generate
-RUN npx prisma migrate deploy
 
 # Expose port
 EXPOSE 3000
 
-# Start command
 CMD ["node", "src/index.js"]
