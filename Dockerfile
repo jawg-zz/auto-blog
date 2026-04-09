@@ -31,7 +31,8 @@ COPY server/prisma/ ./prisma/
 # Generate Prisma client
 RUN npx prisma generate
 
-# Expose port
+# Note: DB migrations run at runtime via docker-compose command
+
 EXPOSE 3000
 
 CMD ["node", "src/index.js"]
