@@ -28,7 +28,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: sh -c "npx prisma db push --accept-data-loss && node src/index.js"
+    command: >
+      sh -c '
+        echo "Waiting for postgres to be ready..."
+        until npx prisma db push --accept-data-loss --skip-generate 2>/dev/null; do
+          echo "DB not ready, retrying in 5s..."
+          sleep 5
+        done
+        echo "Database schema applied successfully"
+        node src/index.js
+      '
     environment:
       DATABASE_URL: postgresql://autoblog:${DB_PASSWORD:-autoblog_secret_123}@postgres:5432/autoblog
       REDIS_URL: redis://redis:6379

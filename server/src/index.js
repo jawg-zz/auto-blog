@@ -15,6 +15,8 @@ async function startServer() {
     await initQueue();
     logger.info('Queue system initialized');
 
+    await import('./workers/index.js').then(({ initWorkers }) => initWorkers());
+
     initScheduler();
     logger.info('Scheduler initialized');
 

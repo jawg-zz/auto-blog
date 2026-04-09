@@ -1,6 +1,8 @@
-import fetch from 'node-fetch';
+import nodeFetch from 'node-fetch';
 import { BasePublisher } from './index.js';
 import { logger } from '../../utils/logger.js';
+
+const fetch = nodeFetch;
 
 export class WordPressPublisher extends BasePublisher {
   constructor(credentials) {
