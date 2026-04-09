@@ -1,15 +1,28 @@
 FROM node:20-alpine
 
-WORKDIR /app
-
-# Install yarn
+# Install dependencies and tools
 RUN npm install -g yarn
 
-# Copy package files
+WORKDIR /app
+
+# Copy server package files
 COPY package*.json ./
 
-# Install dependencies using yarn
+# Install server dependencies
 RUN yarn install --network-timeout 100000
+
+# Copy client package files
+COPY client/package*.json ./client/
+
+# Install client dependencies
+WORKDIR /app/client
+RUN yarn install --network-timeout 100000
+
+# Build client
+RUN yarn build
+
+# Go back to app directory
+WORKDIR /app
 
 # Copy source files
 COPY src/ ./src/
