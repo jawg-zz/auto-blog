@@ -68,12 +68,12 @@ export const schemas = {
   }),
 
   login: Joi.object({
-    email: Joi.string().email().required(),
+    email: Joi.string().required(),
     password: Joi.string().required()
   }),
 
   register: Joi.object({
-    email: Joi.string().email().required(),
+    email: Joi.string().required(),
     password: Joi.string().min(6).required(),
     name: Joi.string().max(255)
   })
