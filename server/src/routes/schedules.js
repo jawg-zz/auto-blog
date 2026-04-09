@@ -4,8 +4,7 @@ import { validate, schemas } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { authenticate } from '../middleware/auth.js';
 import { getQueue } from '../services/queue.js';
-import pkg from 'cron-parser';
-const { validateCronExpression } = pkg;
+import { CronExpressionParser } from 'cron-parser';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -48,7 +47,7 @@ router.post('/', authenticate, validate(schemas.schedule), async (req, res, next
     const { cronExpression } = req.body;
 
     try {
-      validateCronExpression(cronExpression);
+      CronExpressionParser.parse(cronExpression);
     } catch (e) {
       return res.status(400).json({ error: 'Invalid cron expression' });
     }
@@ -77,7 +76,7 @@ router.put('/:id', authenticate, validate(schemas.schedule), async (req, res, ne
     const { cronExpression } = req.body;
 
     try {
-      validateCronExpression(cronExpression);
+      CronExpressionParser.parse(cronExpression);
     } catch (e) {
       return res.status(400).json({ error: 'Invalid cron expression' });
     }
