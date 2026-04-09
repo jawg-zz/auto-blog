@@ -1,7 +1,7 @@
 FROM node:20-alpine
 
 # Install dependencies and tools
-RUN npm install -g yarn
+RUN npm install -g yarn --force
 
 WORKDIR /app
 
