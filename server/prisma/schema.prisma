@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SourceType {
+  rss
+  manual
+  ai_generation
+}
+
+enum PostStatus {
+  draft
+  scheduled
+  published
+  failed
+}
+
+enum PlatformType {
+  wordpress
+  ghost
+  medium
+  custom_api
+}
+
+enum PublishingStatus {
+  success
+  failed
+  retrying
+}
+
+model Source {
+  id          String      @id @default(uuid())
+  name        String      @db.VarChar(255)
+  type        SourceType
+  config      Json
+  enabled     Boolean     @default(true)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  posts       Post[]
+  schedules   Schedule[]
+
+  @@map("sources")
+}
+
+model Post {
+  id              String      @id @default(uuid())
+  title           String      @db.VarChar(500)
+  content         String      @db.Text
+  excerpt         String?     @db.Text
+  status          PostStatus  @default(draft)
+  sourceId        String?     @map("source_id")
+  categoryId      String?     @map("category_id")
+  featuredImage   String?     @db.VarChar(1000)
+  seoTitle        String?     @db.VarChar(500)
+  seoDescription  String?     @map("seo_description") @db.Text
+  publishedAt     DateTime?   @map("published_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  source          Source?     @relation(fields: [sourceId], references: [id])
+  category        Category?   @relation(fields: [categoryId], references: [id])
+  tags            PostTag[]
+  publishingLogs  PublishingLog[]
+
+  @@map("posts")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @db.VarChar(255)
+  slug        String    @unique @db.VarChar(255)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  posts       Post[]
+
+  @@map("categories")
+}
+
+model Tag {
+  id        String     @id @default(uuid())
+  name      String     @db.VarChar(255)
+  slug      String     @unique @db.VarChar(255)
+  createdAt DateTime   @default(now()) @map("created_at")
+  posts     PostTag[]
+
+  @@map("tags")
+}
+
+model PostTag {
+  postId    String @map("post_id")
+  tagId     String @map("tag_id")
+  post      Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag       Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@map("post_tags")
+}
+
+model Platform {
+  id          String        @id @default(uuid())
+  name        String        @db.VarChar(255)
+  type        PlatformType
+  credentials Json
+  enabled     Boolean       @default(true)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  publishingLogs PublishingLog[]
+
+  @@map("platforms")
+}
+
+model PublishingLog {
+  id            String          @id @default(uuid())
+  postId        String          @map("post_id")
+  platformId    String          @map("platform_id")
+  status        PublishingStatus
+  response      Json?
+  errorMessage  String?         @map("error_message") @db.Text
+  attempts      Int             @default(1)
+  publishedUrl  String?         @map("published_url") @db.VarChar(1000)
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  post          Post            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform      Platform        @relation(fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@map("publishing_logs")
+}
+
+model Schedule {
+  id               String    @id @default(uuid())
+  name             String    @db.VarChar(255)
+  sourceId         String    @map("source_id")
+  platformIds      String[]  @map("platform_ids")
+  cronExpression   String    @db.VarChar(100)
+  enabled          Boolean   @default(true)
+  lastRun          DateTime? @map("last_run")
+  nextRun          DateTime? @map("next_run")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  source           Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@map("schedules")
+}
+
+model Setting {
+  key         String   @id @db.VarChar(255)
+  value       Json
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique @db.VarChar(255)
+  password     String
+  name         String?  @db.VarChar(255)
+  role         String   @default("user")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}

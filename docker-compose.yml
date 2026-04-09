@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: autoblog
+      POSTGRES_USER: autoblog
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-autoblog_secret_123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+    volumes:
+      - redis_data:/data
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://autoblog:${DB_PASSWORD:-autoblog_secret_123}@postgres:5432/autoblog
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      AI_API_KEY: ${AI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.autoblog.rule=Host(`autoblog.spidmax.win`)"
+      - "traefik.http.routers.autoblog.entrypoints=websecure"
+      - "traefik.http.routers.autoblog.tls.certresolver=letsencrypt"
+      - "traefik.http.services.autoblog.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  dokploy-network:
+    external: true
