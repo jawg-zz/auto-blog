@@ -2,18 +2,16 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files only
+# Install yarn
+RUN npm install -g yarn
+
+# Copy package files
 COPY package*.json ./
 
-# Debug: check what's in the image
-RUN node --version && npm --version
+# Install dependencies using yarn
+RUN yarn install --network-timeout 100000
 
-# Install dependencies with error output
-RUN npm config set fetch-retries 5 && \
-    npm config set fetch-timeout 60000 && \
-    npm install --loglevel=error
-
-# Copy rest of files
+# Copy source files
 COPY src/ ./src/
 COPY prisma/ ./prisma/
 
