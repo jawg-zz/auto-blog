@@ -4,10 +4,17 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY client/package*.json ./client/
 
-# Install all dependencies
-RUN npm install && cd client && npm install
+# Install root dependencies
+RUN npm install
+
+# Copy client package files and install client deps
+COPY client/package*.json ./client/
+WORKDIR /app/client
+RUN npm install
+
+# Go back to app directory
+WORKDIR /app
 
 # Copy source code
 COPY client/ ./client/
@@ -15,10 +22,13 @@ COPY prisma/ ./prisma/
 COPY src/ ./src/
 
 # Build client
-RUN cd client && npm run build
+WORKDIR /app/client
+RUN npm run build
 
 # Generate Prisma client and run migrations
-RUN npx prisma generate && npx prisma migrate deploy
+WORKDIR /app
+RUN npx prisma generate
+RUN npx prisma migrate deploy
 
 # Expose port
 EXPOSE 3000
