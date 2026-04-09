@@ -1,20 +1,17 @@
 # Build stage for client
-FROM node:20 AS client-builder
+FROM node:20-alpine AS client-builder
 
 WORKDIR /app/client
 COPY client/ ./
 RUN npm install && npm run build
 
 # Production stage
-FROM node:20
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install bash and curl for healthchecks
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    bash \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Install bash for shell scripts
+RUN apk add --no-cache bash
 
 # Install dependencies
 COPY package*.json ./

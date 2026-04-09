@@ -45,7 +45,7 @@ services:
       - "traefik.http.routers.autoblog.tls.certresolver=letsencrypt"
       - "traefik.http.services.autoblog.loadbalancer.server.port=3000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
