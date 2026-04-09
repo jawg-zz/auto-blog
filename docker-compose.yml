@@ -45,6 +45,9 @@ services:
       PORT: 3000
       JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
       AI_API_KEY: ${AI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4-turbo-preview}
     depends_on:
       postgres:
         condition: service_healthy

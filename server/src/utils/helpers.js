@@ -1,7 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
-import crypto from 'crypto';
-
-export const generateId = () => uuidv4();
+import { CronExpressionParser } from 'cron-parser';
 
 export const slugify = (text) => {
   return text
@@ -53,18 +50,11 @@ export const maskSensitiveData = (obj, keys = ['password', 'apiKey', 'accessToke
   return result;
 };
 
-export const parseCronExpression = (cron) => {
-  const parts = cron.split(' ');
-  return {
-    second: parts[0] || '0',
-    minute: parts[1],
-    hour: parts[2],
-    dayOfMonth: parts[3],
-    month: parts[4],
-    dayOfWeek: parts[5]
-  };
-};
-
 export const getNextRunTime = (cronExpression) => {
-  return new Date();
+  try {
+    const interval = CronExpressionParser.parse(cronExpression);
+    return interval.next().toDate();
+  } catch {
+    return null;
+  }
 };

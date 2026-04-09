@@ -20,19 +20,20 @@ export async function generateContent(prompt, options = {}) {
 
 async function generateWithOpenAI(prompt, options = {}) {
   const apiKey = config.ai.openai.apiKey;
+  const baseUrl = config.ai.openai.baseUrl;
   
   if (!apiKey) {
     throw new Error('OpenAI API key not configured');
   }
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: options.model || config.ai.openai.model,
+      model: options.model || config.ai.openai.model || 'gpt-4-turbo-preview',
       messages: [
         { role: 'system', content: 'You are a professional blog content writer. Write engaging, well-structured content in HTML format.' },
         { role: 'user', content: prompt }

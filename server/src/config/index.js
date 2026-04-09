@@ -28,8 +28,9 @@ export const config = {
   ai: {
     defaultProvider: process.env.AI_PROVIDER || 'openai',
     openai: {
-      apiKey: process.env.OPENAI_API_KEY,
-      model: 'gpt-4-turbo-preview',
+      apiKey: process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY,
+      baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+      model: process.env.OPENAI_MODEL || 'gpt-4-turbo-preview',
       maxTokens: 2000
     },
     anthropic: {

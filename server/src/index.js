@@ -3,19 +3,19 @@ import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { initQueue } from './services/queue.js';
 import { initScheduler } from './services/scheduler.js';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { closeQueues } from './services/queue.js';
+import { prisma } from './utils/db.js';
 
 async function startServer() {
   try {
-    await prisma.$connect;
+    await prisma.$connect();
     logger.info('Database connected successfully');
 
     await initQueue();
     logger.info('Queue system initialized');
 
     await import('./workers/index.js').then(({ initWorkers }) => initWorkers());
+    logger.info('Workers initialized');
 
     initScheduler();
     logger.info('Scheduler initialized');
@@ -31,6 +31,7 @@ async function startServer() {
 
 process.on('SIGINT', async () => {
   logger.info('Shutting down gracefully...');
+  await closeQueues();
   await prisma.$disconnect();
   process.exit(0);
 });

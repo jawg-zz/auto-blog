@@ -10,8 +10,7 @@ export class GhostPublisher extends BasePublisher {
   }
 
   getAdminApiUrl() {
-    const [id, secret] = this.apiKey.split(':');
-    const hash = Buffer.from(`${id}:${secret}`).toString('base64');
+    const hash = Buffer.from(this.apiKey).toString('base64');
     return `${this.adminUrl}/ghost/api/admin/`;
   }
 

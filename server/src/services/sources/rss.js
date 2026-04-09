@@ -1,7 +1,7 @@
 import Parser from 'rss-parser';
 import { BaseSource } from './index.js';
 import { logger } from '../../utils/logger.js';
-import { extractExcerpt } from '../../utils/helpers.js';
+import { extractExcerpt, sanitizeHtml } from '../../utils/helpers.js';
 
 export class RssSource extends BaseSource {
   constructor(config) {
@@ -22,7 +22,7 @@ export class RssSource extends BaseSource {
 
       const items = (feed.items || []).slice(0, this.config.maxItems || 50).map(item => ({
         title: item.title || 'Untitled',
-        content: item.content || item['content:encoded'] || item.summary || '',
+        content: sanitizeHtml(item.content || item['content:encoded'] || item.summary || ''),
         excerpt: extractExcerpt(item.content || item.summary || ''),
         link: item.link,
         pubDate: item.pubDate || item.isoDate,
@@ -51,7 +51,7 @@ export async function fetchRssFeed(url, options = {}) {
     link: feed.link,
     items: (feed.items || []).slice(0, options.maxItems || 50).map(item => ({
       title: item.title || 'Untitled',
-      content: item.content || item['content:encoded'] || '',
+      content: sanitizeHtml(item.content || item['content:encoded'] || ''),
       excerpt: extractExcerpt(item.content || ''),
       link: item.link,
       pubDate: item.pubDate || item.isoDate,

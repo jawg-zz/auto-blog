@@ -1,13 +1,12 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { validate, schemas } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { authenticate } from '../middleware/auth.js';
 import { getQueue } from '../services/queue.js';
 import { CronExpressionParser } from 'cron-parser';
+import { prisma } from '../utils/db.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get('/', authenticate, async (req, res, next) => {
   try {

@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { validate, schemas } from '../middleware/validate.js';
+import { authenticate } from '../middleware/auth.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+import { prisma } from '../utils/db.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.post('/register', validate(schemas.register), async (req, res, next) => {
   try {
@@ -83,19 +83,10 @@ router.post('/login', validate(schemas.login), async (req, res, next) => {
   }
 });
 
-router.get('/me', async (req, res, next) => {
+router.get('/me', authenticate, async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, config.jwt.secret);
-
     const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
+      where: { id: req.user.id },
       select: { id: true, email: true, name: true, role: true, createdAt: true }
     });
 
@@ -105,9 +96,6 @@ router.get('/me', async (req, res, next) => {
 
     res.json(user);
   } catch (error) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
     next(error);
   }
 });

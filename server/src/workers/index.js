@@ -1,4 +1,3 @@
-import { PrismaClient } from '@prisma/client';
 import { getQueue } from '../services/queue.js';
 import { logger } from '../utils/logger.js';
 import { WordPressPublisher } from '../services/publishers/wordpress.js';
@@ -8,15 +7,14 @@ import { CustomApiPublisher } from '../services/publishers/custom.js';
 import { RssSource } from '../services/sources/rss.js';
 import { AiSource } from '../services/sources/ai.js';
 import { fetchRssFeed } from '../services/sources/rss.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../utils/db.js';
 
 export function initWorkers() {
   const publishingQueue = getQueue('publishing');
   const schedulingQueue = getQueue('scheduling');
   const contentQueue = getQueue('content');
 
-  publishingQueue.process('publish-post', 5, async (job) => {
+  publishingQueue.process('publish-post', { concurrency: 5 }, async (job) => {
     const { postId, platformId } = job.data;
     
     const post = await prisma.post.findUnique({
@@ -82,7 +80,7 @@ export function initWorkers() {
     return result;
   });
 
-  publishingQueue.process('retry-failed', 3, async (job) => {
+  publishingQueue.process('retry-failed', { concurrency: 3 }, async (job) => {
     const { postId, platformId } = job.data;
     
     await prisma.publishingLog.updateMany({
@@ -140,16 +138,6 @@ export function initWorkers() {
     logger.info(`Schedule ${scheduleId} completed: Processed ${items.length} items`);
 
     return { processed: items.length };
-  });
-
-  contentQueue.process('process-rss', async (job) => {
-    const { sourceId, url } = job.data;
-
-    const feed = await fetchRssFeed(url);
-    
-    logger.info(`RSS processing complete: ${feed.items.length} items from ${url}`);
-
-    return feed;
   });
 
   contentQueue.process('generate-ai', async (job) => {

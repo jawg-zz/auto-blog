@@ -1,13 +1,12 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { validate, schemas } from '../middleware/validate.js';
 import { authenticate } from '../middleware/auth.js';
 import { slugify } from '../utils/helpers.js';
+import { prisma } from '../utils/db.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
-router.get('/', async (req, res, next) => {
+router.get('/', authenticate, async (req, res, next) => {
   try {
     const tags = await prisma.tag.findMany({
       orderBy: { name: 'asc' },
@@ -19,7 +18,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', authenticate, async (req, res, next) => {
   try {
     const tag = await prisma.tag.findUnique({
       where: { id: req.params.id },

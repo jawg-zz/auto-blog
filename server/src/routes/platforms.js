@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { validate, schemas } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { authenticate } from '../middleware/auth.js';
@@ -8,9 +7,9 @@ import { testWordPressConnection } from '../services/publishers/wordpress.js';
 import { testGhostConnection } from '../services/publishers/ghost.js';
 import { testMediumConnection } from '../services/publishers/medium.js';
 import { testCustomApiConnection } from '../services/publishers/custom.js';
+import { prisma } from '../utils/db.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get('/', authenticate, async (req, res, next) => {
   try {

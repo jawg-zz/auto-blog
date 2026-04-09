@@ -64,12 +64,13 @@ export class WordPressPublisher extends BasePublisher {
       const imageResponse = await fetch(imageUrl);
       const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
       const imageName = imageUrl.split('/').pop() || 'image.jpg';
+      const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
 
       const mediaResponse = await fetch(`${this.siteUrl}/wp-json/wp/v2/media`, {
         method: 'POST',
         headers: {
           'Authorization': `Basic ${Buffer.from(`${this.username}:${this.appPassword}`).toString('base64')}`,
-          'Content-Type': 'image/jpeg',
+          'Content-Type': contentType,
           'Content-Disposition': `attachment; filename="${imageName}"`
         },
         body: imageBuffer
@@ -86,11 +87,59 @@ export class WordPressPublisher extends BasePublisher {
   }
 
   async getCategoryIds(categories) {
-    return [];
+    if (!categories || categories.length === 0) return [];
+    
+    try {
+      const auth = Buffer.from(`${this.username}:${this.appPassword}`).toString('base64');
+      const response = await fetch(`${this.siteUrl}/wp-json/wp/v2/categories?per_page=100`, {
+        headers: { 'Authorization': `Basic ${auth}` }
+      });
+      
+      if (!response.ok) return [];
+      
+      const wpCategories = await response.json();
+      const categoryIds = [];
+      
+      for (const catName of categories) {
+        const wpCat = wpCategories.find(c => c.name.toLowerCase() === catName.toLowerCase());
+        if (wpCat) {
+          categoryIds.push(wpCat.id);
+        }
+      }
+      
+      return categoryIds;
+    } catch (error) {
+      logger.warn('Failed to get category IDs:', error);
+      return [];
+    }
   }
 
   async getTagIds(tags) {
-    return [];
+    if (!tags || tags.length === 0) return [];
+    
+    try {
+      const auth = Buffer.from(`${this.username}:${this.appPassword}`).toString('base64');
+      const response = await fetch(`${this.siteUrl}/wp-json/wp/v2/tags?per_page=100`, {
+        headers: { 'Authorization': `Basic ${auth}` }
+      });
+      
+      if (!response.ok) return [];
+      
+      const wpTags = await response.json();
+      const tagIds = [];
+      
+      for (const tagName of tags) {
+        const wpTag = wpTags.find(t => t.name.toLowerCase() === tagName.toLowerCase());
+        if (wpTag) {
+          tagIds.push(wpTag.id);
+        }
+      }
+      
+      return tagIds;
+    } catch (error) {
+      logger.warn('Failed to get tag IDs:', error);
+      return [];
+    }
   }
 
   async testConnection() {

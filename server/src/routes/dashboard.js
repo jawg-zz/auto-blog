@@ -1,9 +1,8 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth.js';
+import { prisma } from '../utils/db.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get('/stats', authenticate, async (req, res, next) => {
   try {
@@ -42,15 +41,33 @@ router.get('/stats', authenticate, async (req, res, next) => {
       })
     ]);
 
-    const postsByDay = await prisma.post.groupBy({
-      by: ['createdAt'],
-      _count: { id: true },
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const postsLastWeek = await prisma.post.findMany({
       where: {
-        createdAt: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-        }
-      }
+        createdAt: { gte: sevenDaysAgo }
+      },
+      select: { createdAt: true }
     });
+
+    const postsByDayMap = {};
+    for (let i = 0; i < 7; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const key = date.toISOString().split('T')[0];
+      postsByDayMap[key] = 0;
+    }
+
+    for (const post of postsLastWeek) {
+      const key = post.createdAt.toISOString().split('T')[0];
+      if (postsByDayMap[key] !== undefined) {
+        postsByDayMap[key]++;
+      }
+    }
+
+    const postsByDay = Object.entries(postsByDayMap).map(([date, count]) => ({
+      date,
+      count
+    })).sort((a, b) => a.date.localeCompare(b.date));
 
     const publishingStats = await prisma.publishingLog.groupBy({
       by: ['status'],
