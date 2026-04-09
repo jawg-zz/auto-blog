@@ -9,7 +9,7 @@ WORKDIR /app
 COPY server/package*.json ./
 
 # Install server dependencies
-RUN yarn install --network-timeout 100000
+RUN yarn install --network-timeout 100000 || yarn add cron-parser
 
 # Copy client directory
 COPY server/client/ ./client/
