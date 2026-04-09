@@ -1,40 +1,22 @@
 {
-  "name": "autoblog-server",
+  "name": "auto-blogging-system",
   "version": "1.0.0",
-  "description": "Auto blogging system API server",
-  "main": "src/index.js",
-  "type": "module",
+  "description": "Advanced auto blogging system with multi-platform publishing",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
   "scripts": {
-    "dev": "nodemon src/index.js",
-    "start": "node src/index.js",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",
-    "db:seed": "node prisma/seed.js",
-    "db:studio": "prisma studio"
-  },
-  "dependencies": {
-    "@prisma/client": "^5.10.0",
-    "bcryptjs": "^2.4.3",
-    "bull": "^4.12.2",
-    "compression": "^1.7.4",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.18.3",
-    "express-rate-limit": "^7.2.0",
-    "helmet": "^7.1.0",
-    "ioredis": "^5.3.2",
-    "joi": "^17.12.2",
-    "jsonwebtoken": "^9.0.2",
-    "node-cron": "^3.0.3",
-    "nodemailer": "^6.9.12",
-    "rss-parser": "^3.13.0",
-    "uuid": "^9.0.1",
-    "winston": "^3.11.0",
-    "xml2js": "^0.6.2"
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=client",
+    "start": "npm run start --workspace=server",
+    "setup": "npm install && npm run setup:db --workspace=server",
+    "setup:db": "npm run db:migrate --workspace=server && npm run db:seed --workspace=server"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0",
-    "prisma": "^5.10.0"
+    "concurrently": "^8.2.2"
   }
 }
