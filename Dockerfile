@@ -6,13 +6,13 @@ RUN npm install -g yarn --force
 WORKDIR /app
 
 # Copy server package files
-COPY package*.json ./
+COPY server/package*.json ./
 
 # Install server dependencies
 RUN yarn install --network-timeout 100000
 
 # Copy client package files
-COPY client/package*.json ./client/
+COPY server/client/package*.json ./client/
 
 # Install client dependencies
 WORKDIR /app/client
@@ -24,9 +24,9 @@ RUN yarn build
 # Go back to app directory
 WORKDIR /app
 
-# Copy source files
-COPY src/ ./src/
-COPY prisma/ ./prisma/
+# Copy source files from server/
+COPY server/src/ ./src/
+COPY server/prisma/ ./prisma/
 
 # Generate Prisma client
 RUN npx prisma generate
