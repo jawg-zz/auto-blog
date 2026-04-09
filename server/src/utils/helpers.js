@@ -43,7 +43,7 @@ export const retry = async (fn, maxAttempts = 3, delayMs = 1000) => {
   throw lastError;
 };
 
-export const maskSensitiveData = (obj, keys = ['password', 'apiKey', 'apiKey', 'accessToken', 'credentials']) => {
+export const maskSensitiveData = (obj, keys = ['password', 'apiKey', 'accessToken', 'credentials']) => {
   const result = { ...obj };
   for (const key of Object.keys(result)) {
     if (keys.some(k => key.toLowerCase().includes(k.toLowerCase()))) {

@@ -4,8 +4,7 @@ import { validate, schemas } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { authenticate } from '../middleware/auth.js';
 import { getQueue } from '../services/queue.js';
-import pkg from 'cron-parser';
-const { validateCronExpression } = pkg;
+import { validateCronExpression } from 'cron-parser';
 
 const router = Router();
 const prisma = new PrismaClient();

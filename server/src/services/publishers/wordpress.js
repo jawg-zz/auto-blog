@@ -62,7 +62,7 @@ export class WordPressPublisher extends BasePublisher {
   async uploadMedia(imageUrl) {
     try {
       const imageResponse = await fetch(imageUrl);
-      const imageBuffer = await imageResponse.buffer();
+      const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
       const imageName = imageUrl.split('/').pop() || 'image.jpg';
 
       const mediaResponse = await fetch(`${this.siteUrl}/wp-json/wp/v2/media`, {

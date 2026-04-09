@@ -1,6 +1,11 @@
 services:
   postgres:
     image: postgres:16-alpine
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "autoblog"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       POSTGRES_DB: autoblog
       POSTGRES_USER: autoblog
