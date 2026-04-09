@@ -59,3 +59,7 @@ export async function fetchRssFeed(url, options = {}) {
     }))
   };
 }
+
+export const rssService = {
+  fetchFeed: fetchRssFeed
+};
