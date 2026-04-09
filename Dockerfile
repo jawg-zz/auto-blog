@@ -10,9 +10,6 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install bash for shell scripts
-RUN apk add --no-cache bash
-
 # Install dependencies
 COPY package*.json ./
 RUN npm install --production
