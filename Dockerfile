@@ -1,12 +1,12 @@
 # Build stage for client
-FROM node:20-slim AS client-builder
+FROM node:20 AS client-builder
 
 WORKDIR /app/client
 COPY client/ ./
 RUN npm install && npm run build
 
 # Production stage
-FROM node:20-slim
+FROM node:20
 
 WORKDIR /app
 
