@@ -49,7 +49,8 @@ router.post('/', authenticate, validate(schemas.schedule), async (req, res, next
     try {
       CronExpressionParser.parse(cronExpression);
     } catch (e) {
-      return res.status(400).json({ error: 'Invalid cron expression' });
+      console.error('[CRON PARSE ERROR]', cronExpression, e.message);
+      return res.status(400).json({ error: `Invalid cron expression: ${e.message}` });
     }
 
     const nextRun = getNextCronRun(cronExpression);
@@ -78,7 +79,8 @@ router.put('/:id', authenticate, validate(schemas.schedule), async (req, res, ne
     try {
       CronExpressionParser.parse(cronExpression);
     } catch (e) {
-      return res.status(400).json({ error: 'Invalid cron expression' });
+      console.error('[CRON PARSE ERROR]', cronExpression, e.message);
+      return res.status(400).json({ error: `Invalid cron expression: ${e.message}` });
     }
 
     const nextRun = getNextCronRun(cronExpression);

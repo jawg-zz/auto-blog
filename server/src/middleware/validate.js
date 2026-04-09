@@ -10,6 +10,8 @@ export const validate = (schema) => {
         message: d.message
       }));
       
+      console.error('[VALIDATION ERROR]', req.method, req.path, details);
+      
       return res.status(400).json({
         error: 'Validation Error',
         details
@@ -35,7 +37,7 @@ export const schemas = {
     status: Joi.string().valid('draft', 'scheduled', 'published', 'failed'),
     sourceId: Joi.string().uuid().allow(null),
     categoryId: Joi.string().uuid().allow(null),
-    featuredImage: Joi.string().uri().allow(null, ''),
+    featuredImage: Joi.string().allow(null, ''),
     seoTitle: Joi.string().max(500).allow(null, ''),
     seoDescription: Joi.string().allow(null, ''),
     tagIds: Joi.array().items(Joi.string().uuid())
