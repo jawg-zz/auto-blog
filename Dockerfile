@@ -1,25 +1,24 @@
-# Build stage for client
-FROM node:20-alpine AS client-builder
-
-WORKDIR /app/client
-COPY client/ ./
-RUN npm install && npm run build
-
-# Production stage
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dependencies
+# Copy package files
 COPY package*.json ./
-RUN npm install --production
+COPY server/package*.json ./server/
+COPY client/package*.json ./client/
 
-# Copy server source
+# Install all dependencies (both server and client)
+RUN npm install && \
+    cd server && npm install && \
+    cd ../client && npm install
+
+# Copy source code
 COPY server/ ./server/
+COPY client/ ./client/
 COPY prisma/ ./prisma/
 
-# Copy built client from builder
-COPY --from=client-builder /app/client/dist ./client/dist
+# Build client
+RUN cd client && npm run build
 
 # Generate Prisma client and run migrations
 RUN cd server && npx prisma generate
