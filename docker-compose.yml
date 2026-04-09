@@ -21,7 +21,7 @@ services:
 
   app:
     build:
-      context: ./server
+      context: .
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://autoblog:${DB_PASSWORD:-autoblog_secret_123}@postgres:5432/autoblog
