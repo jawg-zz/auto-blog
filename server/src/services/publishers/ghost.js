@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import jwt from 'jsonwebtoken';
+import { createHmac, randomBytes } from 'crypto';
 import { BasePublisher } from './index.js';
 import { logger } from '../../utils/logger.js';
 
@@ -19,23 +19,30 @@ export class GhostPublisher extends BasePublisher {
     if (!id || !secret) {
       throw new Error('Invalid Ghost API key format. Expected: id:secret');
     }
+
+    // Ghost uses hex-decoded secret to sign a JWT with HS256
     const decodedSecret = Buffer.from(secret, 'hex');
-    const token = jwt.sign(
-      {
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 5 * 60,
-        aud: '/admin/'
-      },
-      decodedSecret,
-      {
-        algorithm: 'HS256',
-        header: {
-          kid: id,
-          alg: 'HS256'
-        }
-      }
-    );
-    return token;
+
+    // Build the JWT header (base64url)
+    const header = { alg: 'HS256', kid: id, typ: 'JWT' };
+    const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
+
+    // Build the JWT payload
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iat: now,
+      exp: now + 5 * 60, // 5 minutes
+      aud: '/admin/'
+    };
+    const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+
+    // Compute the signature
+    const signatureInput = `${encodedHeader}.${encodedPayload}`;
+    const signature = createHmac('sha256', decodedSecret)
+      .update(signatureInput)
+      .digest('base64url');
+
+    return `${signatureInput}.${signature}`;
   }
 
   async publish(post) {
