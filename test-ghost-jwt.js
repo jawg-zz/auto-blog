@@ -9,13 +9,13 @@ const token = jwt.sign(
   { algorithm: 'HS256', header: { kid: id, alg: 'HS256' } }
 );
 
-console.log('Generated token:', token.substring(0, 50) + '...');
+console.log('Token:', token);
 
 const postData = JSON.stringify({
   posts: [{
-    title: 'Test JWT Auth',
-    html: '<p>It works!</p>',
-    status: 'draft'
+    title: 'AutoBlog Test Post - JWT Verified',
+    html: '<p>This post was created via the Ghost Admin API with JWT token auth!</p>',
+    status: 'published'
   }]
 });
 
@@ -27,7 +27,7 @@ const options = {
     'Authorization': `Ghost ${token}`,
     'Content-Type': 'application/json',
     'Accept-Version': 'v6.0',
-    'Content-Length': postData.length
+    'Content-Length': Buffer.byteLength(postData)
   }
 };
 
@@ -36,7 +36,12 @@ const req = https.request(options, (res) => {
   res.on('data', chunk => data += chunk);
   res.on('end', () => {
     console.log('Status:', res.statusCode);
-    console.log('Response:', data.substring(0, 500));
+    if (res.statusCode === 201) {
+      const json = JSON.parse(data);
+      console.log('SUCCESS! Post URL:', json.posts?.[0]?.url);
+    } else {
+      console.log('Response:', data.substring(0, 300));
+    }
   });
 });
 

@@ -36,6 +36,7 @@ export async function initQueue() {
   setupQueueEvents(queues.scheduling, 'scheduling');
   setupQueueEvents(queues.content, 'content');
 
+  await cleanAllStaleJobs();
   logger.info('Bull queues initialized');
 }
 
@@ -62,6 +63,20 @@ export function getQueue(name) {
     throw new Error(`Queue ${name} not found`);
   }
   return queues[name];
+}
+
+export async function cleanAllStaleJobs() {
+  for (const [name, queue] of Object.entries(queues)) {
+    try {
+      const stale = await queue.getFailedJobs();
+      if (stale.length > 0) {
+        await Promise.all(stale.map(job => job.remove()));
+        logger.info(`Cleaned ${stale.length} stale ${name} jobs`);
+      }
+    } catch (error) {
+      logger.warn(`Failed to clean stale ${name} jobs:`, error.message);
+    }
+  }
 }
 
 export async function closeQueues() {
