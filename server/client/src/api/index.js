@@ -56,7 +56,9 @@ export const api = {
     update: (id, data) => client.put(`/posts/${id}`, data),
     delete: (id) => client.delete(`/posts/${id}`),
     publish: (id, platformIds) => client.post(`/posts/${id}/publish`, { platformIds }),
-    retry: (id) => client.post(`/posts/${id}/retry`)
+    retry: (id) => client.post(`/posts/${id}/retry`),
+    bulkDelete: (ids) => client.post('/posts/bulk-delete', { ids }),
+    bulkPublish: (ids, platformIds) => client.post('/posts/bulk-publish', { ids, platformIds })
   },
 
   categories: {

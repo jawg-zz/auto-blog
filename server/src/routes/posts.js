@@ -129,6 +129,46 @@ router.delete('/:id', authenticate, async (req, res, next) => {
   }
 });
 
+router.post('/bulk-delete', authenticate, async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids array is required' });
+    }
+    const result = await prisma.post.deleteMany({
+      where: { id: { in: ids } }
+    });
+    logger.info(`Bulk deleted ${result.count} posts`);
+    res.json({ success: true, deleted: result.count });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/bulk-publish', authenticate, async (req, res, next) => {
+  try {
+    const { ids, platformIds } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids array is required' });
+    }
+    if (!Array.isArray(platformIds) || platformIds.length === 0) {
+      return res.status(400).json({ error: 'platformIds array is required' });
+    }
+
+    const queue = getQueue('publishing');
+    let queued = 0;
+    for (const postId of ids) {
+      for (const platformId of platformIds) {
+        await queue.add('publish-post', { postId, platformId, attempts: 3 });
+        queued++;
+      }
+    }
+    res.json({ success: true, queued });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/:id/publish', authenticate, async (req, res, next) => {
   try {
     const { platformIds } = req.body;

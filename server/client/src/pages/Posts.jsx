@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
-import { Plus, Search, Filter, Edit2, Trash2, Send, RotateCcw, Eye, X } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Send, X, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 
@@ -12,6 +12,8 @@ export default function Posts() {
   const [platforms, setPlatforms] = useState([]);
   const [categories, setCategories] = useState([]);
   const [filters, setFilters] = useState({ status: '', search: '' });
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showBulkPublishModal, setShowBulkPublishModal] = useState(false);
 
   useEffect(() => {
     loadPosts();
@@ -60,6 +62,28 @@ export default function Posts() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (!confirm(`Delete ${selectedIds.length} post(s)? This cannot be undone.`)) return;
+    try {
+      await api.posts.bulkDelete(selectedIds);
+      setSelectedIds([]);
+      loadPosts();
+    } catch (error) {
+      console.error('Failed to bulk delete:', error);
+    }
+  };
+
+  const handleBulkPublish = async (platformIds) => {
+    try {
+      const { data } = await api.posts.bulkPublish(selectedIds, platformIds);
+      setShowBulkPublishModal(false);
+      setSelectedIds([]);
+      alert(`${data.queued} publish job(s) queued`);
+    } catch (error) {
+      console.error('Failed to bulk publish:', error);
+    }
+  };
+
   const handlePublish = async (id) => {
     const enabledPlatforms = platforms.filter(p => p.enabled);
     if (enabledPlatforms.length === 0) {
@@ -89,6 +113,20 @@ export default function Posts() {
     }
   };
 
+  const toggleSelect = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === posts.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(posts.map(p => p.id));
+    }
+  };
+
   const getStatusBadge = (status) => {
     const badges = {
       draft: 'badge-info',
@@ -112,7 +150,7 @@ export default function Posts() {
         </button>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
           <input
@@ -134,12 +172,37 @@ export default function Posts() {
           <option value="published">Published</option>
           <option value="failed">Failed</option>
         </select>
+        {selectedIds.length > 0 && (
+          <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-300">
+            <span className="text-sm text-gray-600">{selectedIds.length} selected</span>
+            <button
+              onClick={() => setShowBulkPublishModal(true)}
+              className="btn-secondary text-sm py-1 px-3 flex items-center gap-1"
+            >
+              <Send size={14} /> Publish
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              className="btn-danger text-sm py-1 px-3 flex items-center gap-1"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-3 text-left w-10">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300"
+                  checked={posts.length > 0 && selectedIds.length === posts.length}
+                  onChange={toggleSelectAll}
+                />
+              </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
@@ -149,7 +212,15 @@ export default function Posts() {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {posts.map((post) => (
-              <tr key={post.id} className="hover:bg-gray-50">
+              <tr key={post.id} className={`hover:bg-gray-50 ${selectedIds.includes(post.id) ? 'bg-blue-50' : ''}`}>
+                <td className="px-4 py-4">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300"
+                    checked={selectedIds.includes(post.id)}
+                    onChange={() => toggleSelect(post.id)}
+                  />
+                </td>
                 <td className="px-6 py-4">
                   <p className="font-medium text-gray-900">{post.title}</p>
                   <p className="text-sm text-gray-500 truncate max-w-md">{post.excerpt || post.content?.substring(0, 80)}</p>
@@ -192,7 +263,7 @@ export default function Posts() {
             ))}
             {posts.length === 0 && (
               <tr>
-                <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                   No posts found
                 </td>
               </tr>
@@ -209,6 +280,66 @@ export default function Posts() {
           onSubmit={handleSubmit}
         />
       )}
+
+      {showBulkPublishModal && (
+        <BulkPublishModal
+          platforms={platforms}
+          count={selectedIds.length}
+          onClose={() => setShowBulkPublishModal(false)}
+          onConfirm={handleBulkPublish}
+        />
+      )}
+    </div>
+  );
+}
+
+function BulkPublishModal({ platforms, count, onClose, onConfirm }) {
+  const [selected, setSelected] = useState(platforms.filter(p => p.enabled).map(p => p.id));
+
+  const toggle = (id) => {
+    setSelected(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl w-full max-w-md">
+        <div className="flex items-center justify-between p-6 border-b">
+          <h2 className="text-xl font-semibold">Publish {count} Post{count !== 1 ? 's' : ''}</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-gray-600">Select platforms to publish to:</p>
+          <div className="space-y-2">
+            {platforms.filter(p => p.enabled).map(p => (
+              <label key={p.id} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-gray-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300"
+                  checked={selected.includes(p.id)}
+                  onChange={() => toggle(p.id)}
+                />
+                <span className="font-medium">{p.name}</span>
+                <span className="text-xs text-gray-500 capitalize">{p.type}</span>
+              </label>
+            ))}
+            {platforms.filter(p => p.enabled).length === 0 && (
+              <p className="text-gray-500 text-sm">No enabled platforms. Enable a platform first.</p>
+            )}
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <button onClick={onClose} className="btn-secondary">Cancel</button>
+            <button
+              onClick={() => onConfirm(selected)}
+              disabled={selected.length === 0}
+              className="btn-primary disabled:opacity-50"
+            >
+              Publish to {selected.length} Platform{selected.length !== 1 ? 's' : ''}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
