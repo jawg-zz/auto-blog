@@ -5,11 +5,18 @@ import { initQueue } from './services/queue.js';
 import { initScheduler } from './services/scheduler.js';
 import { closeQueues } from './services/queue.js';
 import { prisma } from './utils/db.js';
+import Redis from 'ioredis';
 
 async function startServer() {
   try {
     await prisma.$connect();
     logger.info('Database connected successfully');
+
+    // Flush stale jobs from previous crashed runs
+    const redis = new Redis(config.redis.url, { maxRetriesPerRequest: 3 });
+    await redis.flushdb();
+    await redis.quit();
+    logger.info('Redis flushed of stale jobs');
 
     await initQueue();
     logger.info('Queue system initialized');
