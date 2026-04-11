@@ -14,7 +14,7 @@ export function initWorkers() {
   const schedulingQueue = getQueue('scheduling');
   const contentQueue = getQueue('content');
 
-  publishingQueue.process('publish-post', { concurrency: 5 }, async (job) => {
+  publishingQueue.process('publish-post', 5, async (job) => {
     const { postId, platformId } = job.data;
     
     const post = await prisma.post.findUnique({
@@ -80,7 +80,7 @@ export function initWorkers() {
     return result;
   });
 
-  publishingQueue.process('retry-failed', { concurrency: 3 }, async (job) => {
+  publishingQueue.process('retry-failed', 3, async (job) => {
     const { postId, platformId } = job.data;
     
     await prisma.publishingLog.updateMany({
