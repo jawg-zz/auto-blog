@@ -1,7 +1,7 @@
 FROM node:20-alpine
 
 # Install dependencies and tools
-RUN npm install -g yarn --force
+RUN npm install -g yarn
 
 WORKDIR /app
 
@@ -9,10 +9,10 @@ WORKDIR /app
 COPY server/package*.json ./
 
 # Install server dependencies
-RUN yarn install --network-timeout 100000 || yarn add cron-parser
+RUN yarn install --network-timeout 100000
 
-  # Copy client directory
-  COPY client/ ./client/
+# Copy client package files
+COPY server/client/package*.json ./client/
 
 # Install client dependencies
 WORKDIR /app/client
@@ -24,15 +24,14 @@ RUN yarn build
 # Go back to app directory
 WORKDIR /app
 
-# Copy source files from server/
+# Copy source files
 COPY server/src/ ./src/
 COPY server/prisma/ ./prisma/
 
 # Generate Prisma client
 RUN npx prisma generate
 
-# Note: DB migrations run at runtime via docker-compose command
-
+# Expose port
 EXPOSE 3000
 
 CMD ["node", "src/index.js"]
