@@ -78,7 +78,7 @@ async function generateWithAnthropic(prompt, options = {}) {
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.error?.message || 'Anthropic API error');
+    throw new Error(error.message || error.error?.message || 'Anthropic API error');
   }
 
   const data = await response.json();
@@ -90,7 +90,11 @@ export async function summarizeContent(content, maxLength = 200) {
   
   const summary = await generateContent(prompt, { maxTokens: 500 });
   
-  return summary.substring(0, maxLength);
+  if (summary.length <= maxLength) {
+    return summary;
+  }
+  const lastSpace = summary.lastIndexOf(' ', maxLength);
+  return lastSpace > 0 ? summary.substring(0, lastSpace) : summary.substring(0, maxLength);
 }
 
 export async function repurposeContent(content, targetPlatform) {

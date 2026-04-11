@@ -15,7 +15,7 @@ export function initWorkers() {
   const contentQueue = getQueue('content');
 
   publishingQueue.process('publish-post', 5, async (job) => {
-    const { postId, platformId } = job.data;
+    const { postId, platformId, isRetry } = job.data;
     
     const post = await prisma.post.findUnique({
       where: { id: postId },
@@ -56,16 +56,28 @@ export function initWorkers() {
 
     const result = await publisher.publish(postData);
 
-    await prisma.publishingLog.create({
-      data: {
-        postId,
-        platformId,
-        status: 'success',
-        response: result,
-        publishedUrl: result.url,
-        attempts: job.attemptsMade + 1
-      }
-    });
+    if (!isRetry) {
+      await prisma.publishingLog.create({
+        data: {
+          postId,
+          platformId,
+          status: 'success',
+          response: result,
+          publishedUrl: result.url,
+          attempts: job.attemptsMade + 1
+        }
+      });
+    } else {
+      await prisma.publishingLog.updateMany({
+        where: { postId, platformId, status: 'retrying' },
+        data: {
+          status: 'success',
+          response: result,
+          publishedUrl: result.url,
+          attempts: job.attemptsMade + 1
+        }
+      });
+    }
 
     await prisma.post.update({
       where: { id: postId },
@@ -80,64 +92,52 @@ export function initWorkers() {
     return result;
   });
 
-  publishingQueue.process('retry-failed', 3, async (job) => {
-    const { postId, platformId } = job.data;
-    
-    await prisma.publishingLog.updateMany({
-      where: { postId, platformId, status: 'failed' },
-      data: { status: 'retrying' }
-    });
-
-    const publishingJob = await publishingQueue.add('publish-post', {
-      postId,
-      platformId
-    });
-
-    return { retryJobId: publishingJob.id };
-  });
-
   schedulingQueue.process('run-schedule', async (job) => {
-    const { scheduleId, sourceId, platformIds } = job.data;
+    try {
+      const { scheduleId, sourceId, platformIds } = job.data;
 
-    const source = await prisma.source.findUnique({
-      where: { id: sourceId }
-    });
+      const source = await prisma.source.findUnique({
+        where: { id: sourceId }
+      });
 
-    if (!source) {
-      throw new Error('Source not found');
-    }
+      if (!source) {
+        throw new Error('Source not found');
+      }
 
-    let items = [];
-    if (source.type === 'rss') {
-      const feed = await fetchRssFeed(source.config.url);
-      items = feed.items;
-    } else if (source.type === 'ai_generation') {
-      const aiSource = new AiSource(source.config);
-      items = await aiSource.fetch();
-    }
+      let items = [];
+      if (source.type === 'rss') {
+        const feed = await fetchRssFeed(source.config.url);
+        items = feed.items;
+      } else if (source.type === 'ai_generation') {
+        const aiSource = new AiSource(source.config);
+        items = await aiSource.fetch();
+      }
 
-    for (const item of items) {
-      const post = await prisma.post.create({
-        data: {
-          title: item.title,
-          content: item.content,
-          excerpt: item.excerpt || null,
-          sourceId: source.id,
-          status: 'draft'
+      await prisma.$transaction(async (tx) => {
+        for (const item of items) {
+          const post = await tx.post.create({
+            data: {
+              title: item.title,
+              content: item.content,
+              excerpt: item.excerpt || null,
+              sourceId: source.id,
+              status: 'draft'
+            }
+          });
+
+          for (const platformId of platformIds) {
+            await publishingQueue.add('publish-post', { postId: post.id, platformId });
+          }
         }
       });
 
-      for (const platformId of platformIds) {
-        await publishingQueue.add('publish-post', {
-          postId: post.id,
-          platformId
-        });
-      }
+      logger.info(`Schedule ${scheduleId} completed: Processed ${items.length} items`);
+
+      return { processed: items.length };
+    } catch (error) {
+      logger.error(`Schedule ${job.data.scheduleId} failed:`, error);
+      throw error;
     }
-
-    logger.info(`Schedule ${scheduleId} completed: Processed ${items.length} items`);
-
-    return { processed: items.length };
   });
 
   contentQueue.process('generate-ai', async (job) => {

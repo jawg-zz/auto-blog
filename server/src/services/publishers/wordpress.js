@@ -80,10 +80,13 @@ export class WordPressPublisher extends BasePublisher {
         const media = await mediaResponse.json();
         return media.id;
       }
+      const errText = await mediaResponse.text();
+      logger.error(`Media upload failed (${imageUrl}): HTTP ${mediaResponse.status} - ${errText}`);
+      return 0;
     } catch (error) {
-      logger.warn('Media upload failed:', error);
+      logger.error(`Media upload failed (${imageUrl}): ${error.message}`);
+      return 0;
     }
-    return 0;
   }
 
   async getCategoryIds(categories) {

@@ -43,13 +43,25 @@ router.get('/:id', authenticate, async (req, res, next) => {
 
 router.post('/', authenticate, validate(schemas.schedule), async (req, res, next) => {
   try {
-    const { cronExpression } = req.body;
+    const { cronExpression, platformIds } = req.body;
 
     try {
       CronExpressionParser.parse(cronExpression);
     } catch (e) {
       console.error('[CRON PARSE ERROR]', cronExpression, e.message);
       return res.status(400).json({ error: `Invalid cron expression: ${e.message}` });
+    }
+
+    if (platformIds && platformIds.length > 0) {
+      const platforms = await prisma.platform.findMany({
+        where: { id: { in: platformIds } },
+        select: { id: true }
+      });
+      const validIds = new Set(platforms.map(p => p.id));
+      const invalidIds = platformIds.filter(id => !validIds.has(id));
+      if (invalidIds.length > 0) {
+        return res.status(400).json({ error: `Invalid platformIds: ${invalidIds.join(', ')}` });
+      }
     }
 
     const nextRun = getNextCronRun(cronExpression);
@@ -73,13 +85,25 @@ router.post('/', authenticate, validate(schemas.schedule), async (req, res, next
 
 router.put('/:id', authenticate, validate(schemas.schedule), async (req, res, next) => {
   try {
-    const { cronExpression } = req.body;
+    const { cronExpression, platformIds } = req.body;
 
     try {
       CronExpressionParser.parse(cronExpression);
     } catch (e) {
       console.error('[CRON PARSE ERROR]', cronExpression, e.message);
       return res.status(400).json({ error: `Invalid cron expression: ${e.message}` });
+    }
+
+    if (platformIds && platformIds.length > 0) {
+      const platforms = await prisma.platform.findMany({
+        where: { id: { in: platformIds } },
+        select: { id: true }
+      });
+      const validIds = new Set(platforms.map(p => p.id));
+      const invalidIds = platformIds.filter(id => !validIds.has(id));
+      if (invalidIds.length > 0) {
+        return res.status(400).json({ error: `Invalid platformIds: ${invalidIds.join(', ')}` });
+      }
     }
 
     const nextRun = getNextCronRun(cronExpression);
@@ -139,27 +163,8 @@ router.post('/:id/trigger', authenticate, async (req, res, next) => {
 });
 
 function getNextCronRun(cronExpression) {
-  const cron = cronExpression.split(' ');
-  const now = new Date();
-  
-  let minute = cron[0];
-  let hour = cron[1];
-  let dayOfMonth = cron[2];
-  let month = cron[3];
-  let dayOfWeek = cron[4];
-
-  if (minute === '*') minute = now.getMinutes();
-  if (hour === '*') hour = now.getHours();
-  
-  const next = new Date(now);
-  next.setMinutes(parseInt(minute) || 0);
-  next.setHours(parseInt(hour) || 0);
-  
-  if (next <= now) {
-    next.setDate(next.getDate() + 1);
-  }
-
-  return next;
+  const interval = CronExpressionParser.parse(cronExpression);
+  return interval.next().toDate();
 }
 
 export default router;

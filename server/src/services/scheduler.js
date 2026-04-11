@@ -1,10 +1,11 @@
-import { PrismaClient } from '@prisma/client';
 import cron from 'node-cron';
+import { CronExpressionParser } from 'cron-parser';
 import { logger } from '../utils/logger.js';
 import { getQueue } from './queue.js';
+import { prisma } from '../utils/db.js';
 
-const prisma = new PrismaClient();
 let scheduledTasks = [];
+let isReloading = false;
 
 export function initScheduler() {
   scheduleHealthCheck();
@@ -17,6 +18,9 @@ export function initScheduler() {
 }
 
 async function loadSchedulesFromDb() {
+  if (isReloading) return;
+  isReloading = true;
+  
   try {
     const schedules = await prisma.schedule.findMany({
       where: { enabled: true },
@@ -29,23 +33,30 @@ async function loadSchedulesFromDb() {
     scheduledTasks = [];
 
     for (const schedule of schedules) {
-      const task = cron.schedule(schedule.cronExpression, async () => {
-        await triggerSchedule(schedule);
-      }, {
-        scheduled: true
-      });
+      try {
+        const task = cron.schedule(schedule.cronExpression, async () => {
+          await triggerSchedule(schedule);
+        }, {
+          scheduled: true
+        });
 
-      scheduledTasks.push({
-        id: schedule.id,
-        task
-      });
+        scheduledTasks.push({
+          id: schedule.id,
+          task
+        });
 
-      logger.info(`Schedule loaded: ${schedule.name} (${schedule.cronExpression})`);
+        logger.info(`Schedule loaded: ${schedule.name} (${schedule.cronExpression})`);
+      } catch (e) {
+        logger.error(`Invalid cron for schedule ${schedule.id}: ${schedule.cronExpression}`);
+        // Optionally disable: await prisma.schedule.update({ where: { id: schedule.id }, data: { enabled: false } });
+      }
     }
 
     logger.info(`Loaded ${scheduledTasks.length} schedules`);
   } catch (error) {
     logger.error('Failed to load schedules:', error);
+  } finally {
+    isReloading = false;
   }
 }
 
@@ -60,7 +71,8 @@ async function triggerSchedule(schedule) {
       platformIds: schedule.platformIds
     });
 
-    const nextRun = calculateNextRun(schedule.cronExpression);
+    const interval = CronExpressionParser.parse(schedule.cronExpression);
+    const nextRun = interval.next().toDate();
     await prisma.schedule.update({
       where: { id: schedule.id },
       data: {
@@ -73,18 +85,6 @@ async function triggerSchedule(schedule) {
   } catch (error) {
     logger.error(`Failed to trigger schedule ${schedule.name}:`, error);
   }
-}
-
-function calculateNextRun(cronExpression) {
-  const parts = cronExpression.split(' ');
-  const now = new Date();
-  
-  const next = new Date(now);
-  next.setMinutes(next.getMinutes() + 1);
-  next.setSeconds(0);
-  next.setMilliseconds(0);
-  
-  return next;
 }
 
 function scheduleHealthCheck() {

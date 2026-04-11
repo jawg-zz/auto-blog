@@ -142,13 +142,11 @@ router.post('/:id/publish', authenticate, async (req, res, next) => {
 
     const queue = getQueue('publishing');
     
-    for (const platformId of platformIds) {
-      await queue.add('publish-post', {
-        postId: post.id,
-        platformId,
-        attempts: 3
-      });
-    }
+    await Promise.all(platformIds.map(platformId => queue.add('publish-post', {
+      postId: post.id,
+      platformId,
+      attempts: 3
+    })));
 
     res.json({ success: true, message: `Queued for publishing to ${platformIds.length} platform(s)` });
   } catch (error) {
@@ -168,13 +166,12 @@ router.post('/:id/retry', authenticate, async (req, res, next) => {
 
     const queue = getQueue('publishing');
     
-    for (const log of failedLogs) {
-      await queue.add('publish-post', {
-        postId: req.params.id,
-        platformId: log.platformId,
-        attempts: 3
-      });
-    }
+    await Promise.all(failedLogs.map(log => queue.add('publish-post', {
+      postId: req.params.id,
+      platformId: log.platformId,
+      attempts: 3,
+      isRetry: true
+    })));
 
     res.json({ success: true, message: `Retry queued for ${failedLogs.length} platform(s)` });
   } catch (error) {

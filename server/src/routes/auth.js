@@ -6,10 +6,17 @@ import { authenticate } from '../middleware/auth.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { prisma } from '../utils/db.js';
+import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
-router.post('/register', validate(schemas.register), async (req, res, next) => {
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many attempts, please try again later.' }
+});
+
+router.post('/register', authRateLimiter, validate(schemas.register), async (req, res, next) => {
   try {
     const { email, password, name } = req.body;
 
@@ -48,7 +55,7 @@ router.post('/register', validate(schemas.register), async (req, res, next) => {
   }
 });
 
-router.post('/login', validate(schemas.login), async (req, res, next) => {
+router.post('/login', authRateLimiter, validate(schemas.login), async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
