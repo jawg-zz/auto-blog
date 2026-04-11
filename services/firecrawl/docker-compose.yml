@@ -21,12 +21,8 @@ x-common-env: &common-env
   REDIS_URL: ${REDIS_URL:-redis://redis:6379}
   REDIS_RATE_LIMIT_URL: ${REDIS_URL:-redis://redis:6379}
   PLAYWRIGHT_MICROSERVICE_URL: ${PLAYWRIGHT_MICROSERVICE_URL:-http://playwright-service:3000/scrape}
-  POSTGRES_USER: ${POSTGRES_USER:-firecrawl}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-firecrawl_secure_pass}
-  POSTGRES_DB: ${POSTGRES_DB:-firecrawl}
-  POSTGRES_HOST: ${POSTGRES_HOST:-nuq-postgres}
-  POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-  USE_DB_AUTHENTICATION: ${USE_DB_AUTHENTICATION:-false}
+  NUQ_DATABASE_URL: ${NUQ_DATABASE_URL:-postgres://postgres:postgres@nuq-postgres:5432/postgres}
+  USE_DB_AUTHENTICATION: "false"
   NUM_WORKERS_PER_QUEUE: ${NUM_WORKERS_PER_QUEUE:-8}
   CRAWL_CONCURRENT_REQUESTS: ${CRAWL_CONCURRENT_REQUESTS:-10}
   MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-5}
@@ -45,7 +41,7 @@ x-common-env: &common-env
   SEARXNG_CATEGORIES: ${SEARXNG_CATEGORIES:-}
   SELF_HOSTED_WEBHOOK_URL: ${SELF_HOSTED_WEBHOOK_URL:-}
   LOGGING_LEVEL: ${LOGGING_LEVEL:-}
-  ALLOW_LOCAL_WEBHOOKS: ${ALLOW_LOCAL_WEBHOOKS:-true}
+  ALLOW_LOCAL_WEBHOOKS: "true"
 
 services:
   playwright-service:
@@ -55,63 +51,84 @@ services:
       PROXY_SERVER: ${PROXY_SERVER:-}
       PROXY_USERNAME: ${PROXY_USERNAME:-}
       PROXY_PASSWORD: ${PROXY_PASSWORD:-}
-      ALLOW_LOCAL_WEBHOOKS: ${ALLOW_LOCAL_WEBHOOKS:-true}
+      ALLOW_LOCAL_WEBHOOKS: "true"
       BLOCK_MEDIA: ${BLOCK_MEDIA:-}
       MAX_CONCURRENT_PAGES: ${CRAWL_CONCURRENT_REQUESTS:-10}
     networks:
       - dokploy-network
-    cpus: 2.0
     mem_limit: 4G
     memswap_limit: 4G
+    shm_size: 1g
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
         compress: "true"
-    tmpfs:
-      - /tmp/.cache:noexec,nosuid,size=1g
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 4G
 
   api:
     <<: *common-service
     environment:
       <<: *common-env
       HOST: "0.0.0.0"
-      PORT: ${INTERNAL_PORT:-3002}
-      EXTRACT_WORKER_PORT: ${EXTRACT_WORKER_PORT:-3004}
-      WORKER_PORT: ${WORKER_PORT:-3005}
-      NUQ_RABBITMQ_URL: amqp://rabbitmq:5672
+      PORT: 3002
+      WORKER_PORT: 3005
+      EXTRACT_WORKER_PORT: 3004
       ENV: local
     depends_on:
       redis:
         condition: service_started
       playwright-service:
         condition: service_started
-      rabbitmq:
-        condition: service_healthy
       nuq-postgres:
-        condition: service_started
+        condition: service_healthy
     networks:
       - dokploy-network
+    mem_limit: 8G
+    memswap_limit: 8G
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '4.0'
-          memory: 8G
+    command: node dist/src/index.js
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.firecrawl.rule=Host(`firecrawl.spidmax.win`)"
       - "traefik.http.routers.firecrawl.entrypoints=websecure"
       - "traefik.http.routers.firecrawl.tls.certresolver=letsencrypt"
       - "traefik.http.services.firecrawl.loadbalancer.server.port=3002"
-      - "traefik.http.middlewares.firecrawlheaders.headers.customrequestheaders.X-API-Key=firecrawl"
+
+  worker:
+    <<: *common-service
+    environment:
+      <<: *common-env
+      HOST: "0.0.0.0"
+      PORT: 3005
+      ENV: local
+    depends_on:
+      redis:
+        condition: service_started
+      nuq-postgres:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+    restart: unless-stopped
+    command: node dist/src/services/queue-worker.js
+
+  extract-worker:
+    <<: *common-service
+    environment:
+      <<: *common-env
+      HOST: "0.0.0.0"
+      PORT: 3004
+      ENV: local
+    depends_on:
+      redis:
+        condition: service_started
+      nuq-postgres:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+    restart: unless-stopped
+    command: node dist/src/services/extract-worker.js
 
   redis:
     image: redis:alpine
@@ -126,33 +143,22 @@ services:
         compress: "true"
     restart: unless-stopped
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    networks:
-      - dokploy-network
-    command: rabbitmq-server
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
-      interval: 5s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "2"
-        compress: "true"
-    restart: unless-stopped
-
   nuq-postgres:
     image: ghcr.io/firecrawl/nuq-postgres:latest
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-firecrawl}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-firecrawl_secure_pass}
-      POSTGRES_DB: ${POSTGRES_DB:-firecrawl}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
     networks:
       - dokploy-network
+    volumes:
+      - nuq_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 10
     logging:
       driver: "json-file"
       options:
@@ -160,6 +166,9 @@ services:
         max-file: "3"
         compress: "true"
     restart: unless-stopped
+
+volumes:
+  nuq_pg_data:
 
 networks:
   dokploy-network:
