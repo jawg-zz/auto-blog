@@ -11,6 +11,10 @@ export async function initQueue() {
       backoff: config.queue.backoff,
       timeout: config.queue.timeout,
       removeOnComplete: false
+    },
+    settings: {
+      staleInterval: 1000, // Check for stale jobs every 1s (faster cleanup)
+      keepJobs: 1000
     }
   });
 
@@ -20,6 +24,10 @@ export async function initQueue() {
       backoff: config.queue.backoff,
       timeout: config.queue.timeout,
       removeOnComplete: false
+    },
+    settings: {
+      staleInterval: 1000,
+      keepJobs: 1000
     }
   });
 
@@ -29,6 +37,10 @@ export async function initQueue() {
       backoff: config.queue.backoff,
       timeout: config.queue.timeout,
       removeOnComplete: false
+    },
+    settings: {
+      staleInterval: 1000,
+      keepJobs: 1000
     }
   });
 
@@ -36,6 +48,7 @@ export async function initQueue() {
   setupQueueEvents(queues.scheduling, 'scheduling');
   setupQueueEvents(queues.content, 'content');
 
+  // Clean stale active jobs immediately on startup, before workers process anything
   await cleanStaleJobs();
   logger.info('Bull queues initialized');
 }
@@ -46,6 +59,11 @@ function setupQueueEvents(queue, name) {
   });
 
   queue.on('failed', (job, error) => {
+    // Suppress "not in active state" errors — these are from Bull's own stale
+    // job cleanup on pre-existing active jobs from a crashed instance. Harmless.
+    if (error.message && error.message.includes('not in the active state')) {
+      return;
+    }
     logger.error(`${name} job ${job.id} failed:`, error.message);
   });
 
@@ -66,18 +84,17 @@ export function getQueue(name) {
 }
 
 export async function cleanStaleJobs() {
-  const now = Date.now();
   for (const [name, queue] of Object.entries(queues)) {
     try {
-      // Remove jobs stuck in 'active' state from a force-killed previous instance
-      const stalled = await queue.clean(1000, 'active');
-      if (stalled.length > 0) {
-        logger.info(`Cleaned ${stalled.length} stale active ${name} jobs`);
+      // Clean stale active jobs (from crashed instance) and old failed jobs
+      const now = Date.now();
+      const staleActive = await queue.clean(1000, 'active');
+      const staleFailed = await queue.clean(now - 7 * 24 * 60 * 60 * 1000, 'failed');
+      if (staleActive.length > 0) {
+        logger.info(`Cleaned ${staleActive.length} stale active ${name} jobs`);
       }
-      // Also clean old failed jobs
-      const failed = await queue.clean(now - 7 * 24 * 60 * 60 * 1000, 'failed');
-      if (failed.length > 0) {
-        logger.info(`Cleaned ${failed.length} stale failed ${name} jobs`);
+      if (staleFailed.length > 0) {
+        logger.info(`Cleaned ${staleFailed.length} stale failed ${name} jobs`);
       }
     } catch (error) {
       logger.warn(`Failed to clean stale ${name} jobs:`, error.message);
