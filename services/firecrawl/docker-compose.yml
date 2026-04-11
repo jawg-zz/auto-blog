@@ -1,15 +1,13 @@
 name: firecrawl
 
 x-common-service: &common-service
-  build:
-    context: .
-    dockerfile: Dockerfile
+  image: ghcr.io/firecrawl/firecrawl
   ulimits:
     nofile:
       soft: 65535
       hard: 65535
   networks:
-    - firecrawl-network
+    - dokploy-network
   extra_hosts:
     - "host.docker.internal:host-gateway"
   logging:
@@ -61,7 +59,7 @@ services:
       BLOCK_MEDIA: ${BLOCK_MEDIA:-}
       MAX_CONCURRENT_PAGES: ${CRAWL_CONCURRENT_REQUESTS:-10}
     networks:
-      - firecrawl-network
+      - dokploy-network
     cpus: 2.0
     mem_limit: 4G
     memswap_limit: 4G
@@ -74,6 +72,11 @@ services:
     tmpfs:
       - /tmp/.cache:noexec,nosuid,size=1g
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
 
   api:
     <<: *common-service
@@ -92,18 +95,28 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_healthy
-    ports:
-      - "${PORT:-3002}:${INTERNAL_PORT:-3002}"
-    command: node dist/src/harness.js --start-docker
-    cpus: 4.0
-    mem_limit: 8G
-    memswap_limit: 8G
+      nuq-postgres:
+        condition: service_started
+    networks:
+      - dokploy-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.firecrawl.rule=Host(`firecrawl.spidmax.win`)"
+      - "traefik.http.routers.firecrawl.entrypoints=websecure"
+      - "traefik.http.routers.firecrawl.tls.certresolver=letsencrypt"
+      - "traefik.http.services.firecrawl.loadbalancer.server.port=3002"
+      - "traefik.http.middlewares.firecrawlheaders.headers.customrequestheaders.X-API-Key=firecrawl"
 
   redis:
     image: redis:alpine
     networks:
-      - firecrawl-network
+      - dokploy-network
     command: redis-server --bind 0.0.0.0
     logging:
       driver: "json-file"
@@ -116,7 +129,7 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     networks:
-      - firecrawl-network
+      - dokploy-network
     command: rabbitmq-server
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
@@ -139,7 +152,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-firecrawl_secure_pass}
       POSTGRES_DB: ${POSTGRES_DB:-firecrawl}
     networks:
-      - firecrawl-network
+      - dokploy-network
     logging:
       driver: "json-file"
       options:
@@ -149,5 +162,5 @@ services:
     restart: unless-stopped
 
 networks:
-  firecrawl-network:
-    driver: bridge
+  dokploy-network:
+    external: true
