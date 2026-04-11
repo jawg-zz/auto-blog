@@ -36,7 +36,7 @@ export async function initQueue() {
   setupQueueEvents(queues.scheduling, 'scheduling');
   setupQueueEvents(queues.content, 'content');
 
-  await cleanAllStaleJobs();
+  await cleanStaleJobs();
   logger.info('Bull queues initialized');
 }
 
@@ -65,13 +65,19 @@ export function getQueue(name) {
   return queues[name];
 }
 
-export async function cleanAllStaleJobs() {
+export async function cleanStaleJobs() {
+  const now = Date.now();
   for (const [name, queue] of Object.entries(queues)) {
     try {
-      const stale = await queue.getFailedJobs();
-      if (stale.length > 0) {
-        await Promise.all(stale.map(job => job.remove()));
-        logger.info(`Cleaned ${stale.length} stale ${name} jobs`);
+      // Remove jobs stuck in 'active' state from a force-killed previous instance
+      const stalled = await queue.clean(1000, 'active');
+      if (stalled.length > 0) {
+        logger.info(`Cleaned ${stalled.length} stale active ${name} jobs`);
+      }
+      // Also clean old failed jobs
+      const failed = await queue.clean(now - 7 * 24 * 60 * 60 * 1000, 'failed');
+      if (failed.length > 0) {
+        logger.info(`Cleaned ${failed.length} stale failed ${name} jobs`);
       }
     } catch (error) {
       logger.warn(`Failed to clean stale ${name} jobs:`, error.message);
