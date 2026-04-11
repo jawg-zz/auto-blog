@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import { createHmac } from 'crypto';
 import { validate, schemas } from '../middleware/validate.js';
 import { authenticate } from '../middleware/auth.js';
 import { config } from '../config/index.js';
@@ -15,6 +15,23 @@ const authRateLimiter = rateLimit({
   max: 10,
   message: { error: 'Too many attempts, please try again later.' }
 });
+
+function signJwt(payload, secret, expiresIn) {
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const fullPayload = {
+    ...payload,
+    iat: now,
+    exp: now + expiresIn
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(fullPayload)).toString('base64url');
+  const signatureInput = `${encodedHeader}.${encodedPayload}`;
+  const signature = createHmac('sha256', Buffer.from(secret, 'utf8'))
+    .update(signatureInput)
+    .digest('base64url');
+  return `${signatureInput}.${signature}`;
+}
 
 router.post('/register', authRateLimiter, validate(schemas.register), async (req, res, next) => {
   try {
@@ -38,10 +55,10 @@ router.post('/register', authRateLimiter, validate(schemas.register), async (req
       }
     });
 
-    const token = jwt.sign(
+    const token = signJwt(
       { id: user.id, email: user.email },
       config.jwt.secret,
-      { expiresIn: config.jwt.expiresIn }
+      config.jwt.expiresIn
     );
 
     logger.info(`User registered: ${user.email}`);
@@ -73,10 +90,10 @@ router.post('/login', authRateLimiter, validate(schemas.login), async (req, res,
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const token = jwt.sign(
+    const token = signJwt(
       { id: user.id, email: user.email },
       config.jwt.secret,
-      { expiresIn: config.jwt.expiresIn }
+      config.jwt.expiresIn
     );
 
     logger.info(`User logged in: ${user.email}`);
