@@ -12,9 +12,11 @@ async function startServer() {
     await prisma.$connect();
     logger.info('Database connected successfully');
 
-    // Flush stale jobs from previous crashed runs
-    const redis = new Redis(config.redis.url, { maxRetriesPerRequest: 3 });
-    await redis.flushdb();
+    // Flush stale jobs from previous crashed runs — must happen before Bull connects
+    const redis = new Redis(config.redis.url, { maxRetriesPerRequest: 3, enableReadyCheck: false, lazyConnect: true });
+    await redis.connect();
+    const result = await redis.flushdb();
+    logger.info(`Redis flushed: ${result}`);
     await redis.quit();
     logger.info('Redis flushed of stale jobs');
 
