@@ -11,8 +11,8 @@ COPY server/package*.json ./
 # Install server dependencies
 RUN yarn install --network-timeout 100000
 
-# Copy client package files
-COPY server/client/package*.json ./client/
+# Copy client source files
+COPY server/client/ ./client/
 
 # Install client dependencies
 WORKDIR /app/client
