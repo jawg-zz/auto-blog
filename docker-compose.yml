@@ -1,77 +1,13 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "autoblog"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  web:
+    build: .
+    ports:
+      - "5000:5000"
     environment:
-      POSTGRES_DB: autoblog
-      POSTGRES_USER: autoblog
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-autoblog_secret_123}
+      - SECRET_KEY=autobl...et
+      - DATABASE_URL=sqlite:///data/autoblog.db
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    networks:
-      - dokploy-network
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    networks:
-      - dokploy-network
-    volumes:
-      - redis_data:/data
-
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: >
-      sh -c '
-        echo "Waiting for postgres to be ready..."
-        until npx prisma db push --accept-data-loss --skip-generate 2>/dev/null; do
-          echo "DB not ready, retrying in 5s..."
-          sleep 5
-        done
-        echo "Database schema applied successfully"
-        node src/index.js
-      '
-    environment:
-      DATABASE_URL: postgresql://autoblog:${DB_PASSWORD:-autoblog_secret_123}@postgres:5432/autoblog
-      REDIS_URL: redis://redis:6379
-      NODE_ENV: production
-      PORT: 3000
-      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
-      AI_API_KEY: ${AI_API_KEY:-}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4-turbo-preview}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    restart: unless-stopped
-    networks:
-      - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.autoblog.rule=Host(`autoblog.spidmax.win`)"
-      - "traefik.http.routers.autoblog.entrypoints=websecure"
-      - "traefik.http.routers.autoblog.tls.certresolver=letsencrypt"
-      - "traefik.http.services.autoblog.loadbalancer.server.port=3000"
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - autoblog-data:/app/data
 
 volumes:
-  postgres_data:
-  redis_data:
-
-networks:
-  dokploy-network:
-    external: true
+  autoblog-data:
