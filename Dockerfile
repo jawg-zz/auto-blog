@@ -1,9 +1,10 @@
 FROM node:20-alpine
 
 # Install Python and uv for the Kenyan news scraper
-RUN apk add --no-cache python3 py3-pip libxml2-dev libxslt-dev libjpeg-turbo-dev zlib-dev libpng-dev && \
-    pip3 install uv --quiet && \
-    rm -rf /root/.cache/pip
+RUN apk add --no-cache python3 py3-pip libxml2-dev libxslt-dev libjpeg-turbo-dev zlib-dev libpng-dev curl && \
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    ln -sf /root/.cargo/bin/uv /usr/local/bin/uv && \
+    rm -rf /var/cache/apk/*
 
 # Install dependencies and tools
 RUN npm install -g yarn --force
