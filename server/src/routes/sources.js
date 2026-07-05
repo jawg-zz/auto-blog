@@ -82,13 +82,13 @@ router.post('/:id/test', authenticate, async (req, res, next) => {
     if (source.type === 'rss') {
       const result = await rssService.fetchFeed(source.config.url);
       res.json({ success: true, items: result.items?.length || 0 });
-    } else {
-      res.json({ success: true, message: 'Source type does not require testing' });
     } else if (source.type === 'kenyan_news') {
       const { KenyanNewsSource } = await import('../services/sources/kenyan-news.js');
       const ks = new KenyanNewsSource(source.config);
       const result = await ks.fetch();
       res.json({ success: true, items: result.length });
+    } else {
+      res.json({ success: true, message: 'Source type does not require testing' });
     }
   } catch (error) {
     logger.error('Source test failed:', error);
