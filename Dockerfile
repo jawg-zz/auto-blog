@@ -3,8 +3,14 @@ FROM node:20-alpine
 # Install Python and uv for the Kenyan news scraper
 RUN apk add --no-cache python3 py3-pip libxml2-dev libxslt-dev libjpeg-turbo-dev zlib-dev libpng-dev curl && \
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    ln -sf /root/.cargo/bin/uv /usr/local/bin/uv && \
-    rm -rf /var/cache/apk/*
+    ln -sf /root/.cargo/bin/uv /usr/local/bin/uv
+
+# Pre-install Python deps for Kenyan news scraper
+COPY server/scripts/requirements.txt /tmp/requirements.txt
+RUN uv pip install --system -r /tmp/requirements.txt && \
+    python3 -m playwright install chromium --with-deps 2>/dev/null || true && \
+    rm -f /tmp/requirements.txt && \
+    rm -rf /var/cache/apk/* /root/.cache
 
 # Install dependencies and tools
 RUN npm install -g yarn --force
