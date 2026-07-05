@@ -6,6 +6,7 @@ import { MediumPublisher } from '../services/publishers/medium.js';
 import { CustomApiPublisher } from '../services/publishers/custom.js';
 import { RssSource } from '../services/sources/rss.js';
 import { AiSource } from '../services/sources/ai.js';
+import { KenyanNewsSource } from '../services/sources/kenyan-news.js';
 import { fetchRssFeed } from '../services/sources/rss.js';
 import { prisma } from '../utils/db.js';
 
@@ -16,7 +17,7 @@ export function initWorkers() {
 
   publishingQueue.process('publish-post', 5, async (job) => {
     const { postId, platformId, isRetry } = job.data;
-    
+
     const post = await prisma.post.findUnique({
       where: { id: postId },
       include: { category: true, tags: { include: { tag: true } } }
@@ -88,7 +89,6 @@ export function initWorkers() {
     });
 
     logger.info(`Post ${postId} published to ${platform.name}: ${result.url}`);
-
     return result;
   });
 
@@ -111,6 +111,9 @@ export function initWorkers() {
       } else if (source.type === 'ai_generation') {
         const aiSource = new AiSource(source.config);
         items = await aiSource.fetch();
+      } else if (source.type === 'kenyan_news') {
+        const ks = new KenyanNewsSource(source.config);
+        items = await ks.fetch();
       }
 
       await prisma.$transaction(async (tx) => {
@@ -120,6 +123,7 @@ export function initWorkers() {
               title: item.title,
               content: item.content,
               excerpt: item.excerpt || null,
+              featuredImage: item.featuredImage || null,
               sourceId: source.id,
               status: 'draft'
             }
@@ -132,7 +136,6 @@ export function initWorkers() {
       });
 
       logger.info(`Schedule ${scheduleId} completed: Processed ${items.length} items`);
-
       return { processed: items.length };
     } catch (error) {
       logger.error(`Schedule ${job.data.scheduleId} failed:`, error);

@@ -1,0 +1,437 @@
+#!/usr/bin/env python3
+"""
+Kenyan news scraper — fetches headlines + images + full articles from Kenyan news sites.
+Handles JS-heavy sites (Citizen Digital, The Star, Standard) via Playwright.
+Free sites (Kenyans.co.ke) via newspaper4k.
+
+Usage:
+  ./kenyan-news                        # top headlines from all sites
+  ./kenyan-news --site citizen         # only Citizen Digital
+  ./kenyan-news --json                 # JSON output
+  ./kenyan-news --images               # download top images to ./images/
+  ./kenyan-news --open URL             # fetch full article text
+"""
+import argparse, json, os, sys, time, urllib.request
+
+CHROME_PATH = "/opt/hermes/.playwright/chromium-1228/chrome-linux/chrome"
+
+SITES = {
+    "kenyans": {
+        "url": "https://www.kenyans.co.ke/news",
+        "mode": "newspaper4k",
+    },
+    "citizen": {
+        "url": "https://www.citizen.digital/",
+        "mode": "playwright",
+    },
+    "the-star": {
+        "url": "https://www.the-star.co.ke/",
+        "mode": "playwright",
+    },
+    "standard": {
+        "url": "https://www.standardmedia.co.ke/",
+        "mode": "playwright",
+    },
+    "tuko": {
+        "url": "https://www.tuko.co.ke/",
+        "mode": "playwright",
+    },
+    "capitalfm": {
+        "url": "https://www.capitalfm.co.ke/news/",
+        "mode": "playwright",
+    },
+}
+
+def fetch_newspaper4k(url):
+    """Fetch headlines from a news site using newspaper4k."""
+    from newspaper import build
+    paper = build(url, memoize_articles=False)
+    articles = []
+    for a in paper.articles[:10]:
+        try:
+            a.download()
+            a.parse()
+            articles.append({
+                "title": a.title,
+                "top_image": a.top_image or "",
+                "url": a.url,
+            })
+        except Exception:
+            articles.append({"title": "[parse error]", "url": a.url, "top_image": ""})
+    return articles
+
+def fetch_playwright(url, site_name):
+    """Fetch headlines using Playwright (handles JS-rendered pages)."""
+    from playwright.sync_api import sync_playwright
+
+    SELECTORS = {
+        "citizen": """
+            () => {
+                const containers = document.querySelectorAll('[class*="card_"], [class*="featured_"]');
+                const articles = [];
+                const seen = new Set();
+                containers.forEach(container => {
+                    const link = container.querySelector('a[href*="/article/"]');
+                    if (!link) return;
+                    const raw = (link.textContent || '').trim();
+                    const parts = raw.split('\\n').map(s => s.trim()).filter(s => s.length > 10);
+                    const sorted = [...parts].sort((a, b) => a.length - b.length);
+                    const title = sorted.find(s => !s.match(/^[•\\-]|^(News|Sports|Business|By\\s|\\d+\\s*(minutes?|hours?|days?))/i)) || parts[0];
+                    if (title.length < 15 || seen.has(title)) return;
+                    seen.add(title);
+                    const img = container.querySelector('img');
+                    articles.push({
+                        title: title.slice(0, 120),
+                        url: link.href,
+                        top_image: img ? (img.src || img.getAttribute('data-src') || '') : ''
+                    });
+                });
+                return articles.slice(0, 10);
+            }
+        """,
+        "the-star": """
+            () => {
+                const links = document.querySelectorAll('article a, .article a, h3 a, h2 a, .card a, [class*="title"] a');
+                const seen = new Set();
+                return Array.from(links).filter(a => {
+                    const text = (a.textContent || '').trim();
+                    return text.length > 20 && text.length < 200 && !seen.has(text) && seen.add(text);
+                }).slice(0, 10).map(a => {
+                    const img = a.querySelector('img') || a.closest('article')?.querySelector('img') || a.parentElement.querySelector('img');
+                    return {
+                        title: (a.textContent || '').trim().slice(0, 120),
+                        url: a.href,
+                        top_image: img ? (img.src || img.getAttribute('data-src') || '') : ''
+                    };
+                });
+            }
+        """,
+        "standard": """
+            () => {
+                window.scrollTo(0, document.body.scrollHeight);
+                const articles = [];
+                const seen = new Set();
+                const containers = document.querySelectorAll('div[class*="col-"], div.mb-4');
+                containers.forEach(container => {
+                    const links = container.querySelectorAll('a[href*="/article/"], a[href*="/opinion/"], a[href*="/national/"], a[href*="/politics/"], a[href*="/education/"]');
+                    let link = null;
+                    for (const l of links) {
+                        if ((l.textContent || '').trim().length > 20) { link = l; break; }
+                    }
+                    if (!link) return;
+                    const title = (link.textContent || '').trim();
+                    if (title.length < 20 || seen.has(title)) return;
+                    seen.add(title);
+                    let imgSrc = '';
+                    const imgs = container.querySelectorAll('img');
+                    for (const img of imgs) {
+                        const src = img.src || '';
+                        const original = img.getAttribute('data-original') || '';
+                        if (src.includes('logo') || src.includes('flagcdn') || src.includes('icon')) continue;
+                        const realSrc = (src.startsWith('data:') && original) ? original : src;
+                        if (realSrc.includes('cdn.standardmedia.co.ke') && img.naturalWidth > 50) {
+                            imgSrc = realSrc; break;
+                        }
+                    }
+                    articles.push({ title: title.slice(0,120), url: link.href, top_image: imgSrc });
+                });
+                return articles.slice(0, 10);
+            }
+        """,
+        "tuko": """
+            () => {
+                const cards = document.querySelectorAll('[class*="article-card"], [class*="c-article-card"], [class*="card-breaking"]');
+                const articles = [];
+                const seen = new Set();
+                cards.forEach(card => {
+                    const link = card.querySelector('a[href*="tuko"]');
+                    if (!link) return;
+                    const text = (link.textContent || '').trim();
+                    if (text.length < 20 || seen.has(text)) return;
+                    seen.add(text);
+                    const img = card.querySelector('img');
+                    const src = img ? (img.src || img.getAttribute('data-src') || '') : '';
+                    articles.push({ title: text.slice(0, 120), url: link.href, top_image: src.startsWith('http') ? src : '' });
+                });
+                return articles.slice(0, 10);
+            }
+        """,
+        "capitalfm": """
+            () => {
+                const links = document.querySelectorAll('a');
+                const articles = [];
+                const seen = new Set();
+                links.forEach(a => {
+                    const text = (a.textContent || '').trim();
+                    const href = a.href || '';
+                    if (text.length < 25 || seen.has(text) || !href.includes('capitalfm.africa')) return;
+                    if (!/^[A-Z]/.test(text)) return;
+                    seen.add(text);
+                    let img = '';
+                    let parent = a.parentElement;
+                    for (let i = 0; i < 3; i++) {
+                        if (!parent) break;
+                        const i2 = parent.querySelector('img');
+                        if (i2) { img = i2.src || i2.getAttribute('data-src') || ''; break; }
+                        parent = parent.parentElement;
+                    }
+                    articles.push({ title: text.slice(0, 120), url: href, top_image: img });
+                });
+                return articles.slice(0, 10);
+            }
+        """,
+    }
+
+    js = SELECTORS.get(site_name)
+    if not js:
+        raise ValueError(f"No selector for site: {site_name}")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            executable_path=CHROME_PATH, headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox",
+                  "--disable-blink-features=AutomationControlled"]
+        )
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 720}
+        )
+        page = context.new_page()
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(8000)
+        if site_name == "standard":
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            page.wait_for_timeout(3000)
+        articles = page.evaluate(js)
+        browser.close()
+        return articles
+
+def download_image(img_url, out_dir, index):
+    """Download an image to the output directory."""
+    if not img_url:
+        return None
+    try:
+        ext = os.path.splitext(img_url.split("?")[0])[1] or ".jpg"
+        if ext.startswith(".svg"):
+            ext = ".jpg"
+        path = os.path.join(out_dir, f"img_{index:02d}{ext}")
+        urllib.request.urlretrieve(img_url, path)
+        return path
+    except Exception:
+        return None
+
+# ─── Full article reader ─────────────────────────────────────────────
+
+def read_article_newspaper4k(url):
+    """Fetch full article text via newspaper4k (works on Kenyans.co.ke)."""
+    from newspaper import Article
+    a = Article(url)
+    a.download()
+    a.parse()
+    return {
+        "title": a.title,
+        "authors": a.authors,
+        "publish_date": str(a.publish_date) if a.publish_date else "",
+        "text": a.text,
+        "top_image": a.top_image or "",
+    }
+
+def read_article_playwright(url):
+    """Fetch full article text via Playwright (JS-heavy sites)."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            executable_path=CHROME_PATH, headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox",
+                  "--disable-blink-features=AutomationControlled"]
+        )
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 720}
+        )
+        page = context.new_page()
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(5000)
+
+        # Standard Media: dismiss popup + scroll for lazy content
+        if "standardmedia" in url:
+            page.evaluate("""() => {
+                // Close any popup/dialog
+                document.querySelectorAll('[class*="popup"], [class*="modal"], [class*="overlay"], [id*="popup"]').forEach(el => el.remove());
+                // Remove backdrop/overlay
+                document.querySelectorAll('.modal-backdrop, .popup-backdrop').forEach(el => el.remove());
+                // Unlock body scroll
+                document.body.style.overflow = '';
+                document.body.style.position = '';
+                // Scroll to load lazy content
+                window.scrollTo(0, document.body.scrollHeight);
+            }""")
+            page.wait_for_timeout(3000)
+            # Try clicking any "Continue reading" or close button
+            try:
+                close_btn = page.query_selector('[class*="close"], [class*="dismiss"], button:has-text("Continue"), .modal button')
+                if close_btn:
+                    close_btn.click()
+                    page.wait_for_timeout(1000)
+            except Exception:
+                pass
+
+        # Extract article body
+        data = page.evaluate("""() => {
+            const candidates = [
+                document.querySelector('article'),
+                document.querySelector('[class*="story-body"]'),
+                document.querySelector('[class*="article-body"]'),
+                document.querySelector('[class*="content-body"]'),
+                document.querySelector('[class*="post-content"]'),
+                document.querySelector('main'),
+            ];
+            for (const el of candidates) {
+                if (el) {
+                    const text = el.innerText.trim();
+                    if (text.length > 200) return {
+                        title: document.title,
+                        text: text.slice(0, 10000),
+                    };
+                }
+            }
+            // Fallback: get meaningful paragraphs
+            const pars = document.querySelectorAll('p');
+            const texts = Array.from(pars).map(p => p.innerText.trim()).filter(t => t.length > 40);
+            return {
+                title: document.title,
+                text: texts.slice(0, 50).join('\\n\\n'),
+            };
+        }""")
+
+        # Get the top image
+        img = page.evaluate("""() => {
+            const img = document.querySelector('meta[property="og:image"]');
+            if (img) return img.content;
+            const lead = document.querySelector('article img, [class*="featured"] img, [class*="hero"] img');
+            return lead ? (lead.src || '') : '';
+        }""")
+
+        browser.close()
+        return {
+            "title": data.get("title", ""),
+            "text": data.get("text", ""),
+            "top_image": img or "",
+        }
+
+def fetch_article(url):
+    """Fetch full article using the best available method.
+    Returns dict with title, text, top_image, authors, publish_date, paywalled.
+    """
+    result = {"paywalled": False}
+
+    # Detect paywalled sites (Standard) — go straight to Playwright
+    paywalled_domains = ["standardmedia.co.ke"]
+    if any(d in url for d in paywalled_domains):
+        result = read_article_playwright(url)
+        result["paywalled"] = "subscribe" in result.get("text", "").lower()[:800]
+        return result
+
+    # Try newspaper4k first (works on most static sites)
+    try:
+        result = read_article_newspaper4k(url)
+        text = result.get("text", "")
+        # Reject if paywall detected or too short
+        if text and len(text) > 200 and "subscribe" not in text.lower()[:500]:
+            return result
+        result["paywalled"] = "subscribe" in text.lower()[:500]
+    except Exception:
+        pass
+
+    # Fall back to Playwright
+    pw = read_article_playwright(url)
+    pw["paywalled"] = "subscribe" in pw.get("text", "").lower()[:800]
+    return pw
+
+# ─── Main ────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(description="Kenyan news scraper")
+    parser.add_argument("--site", choices=list(SITES.keys()) + ["all"], default="all")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--images", action="store_true", help="Download top images")
+    parser.add_argument("--open", type=str, help="Fetch full article text from URL")
+    args = parser.parse_args()
+
+    # If --open is provided, fetch that article and exit
+    if args.open:
+        result = fetch_article(args.open)
+        title = result.get("title", "")
+        text = result.get("text", "")
+        img = result.get("top_image", "")
+        authors = result.get("authors", [])
+        date = result.get("publish_date", "")
+        print(f"\n{'='*65}")
+        print(f"  {title}")
+        if date:
+            print(f"  {date}")
+        if authors:
+            print(f"  By {', '.join(authors)}")
+        print(f"{'='*65}")
+        if img:
+            print(f"\n  📷 {img}")
+        if result.get("paywalled"):
+            print(f"\n  {'─'*65}")
+            print(f"  ⚠️  Full article behind paywall. Showing preview only.")
+            print(f"  {'─'*65}")
+        # Strip paywall text from the body for cleaner output
+        if result.get("paywalled"):
+            paywall_idx = text.lower().find("subscribe")
+            if paywall_idx > 50:
+                text = text[:paywall_idx].strip()
+        print(f"\n{text}")
+        return
+
+    sites = list(SITES.keys()) if args.site == "all" else [args.site]
+    out_dir = "images"
+    if args.images:
+        os.makedirs(out_dir, exist_ok=True)
+
+    all_results = {}
+
+    for name in sites:
+        cfg = SITES[name]
+        print(f"\n{'='*65}", file=sys.stderr)
+        print(f"  {name.upper()} — {cfg['url']}", file=sys.stderr)
+        print(f"{'='*65}", file=sys.stderr)
+
+        try:
+            if cfg["mode"] == "newspaper4k":
+                articles = fetch_newspaper4k(cfg["url"])
+            else:
+                articles = fetch_playwright(cfg["url"], name)
+
+            all_results[name] = articles
+
+            if args.images:
+                for i, a in enumerate(articles):
+                    path = download_image(a.get("top_image", ""), out_dir, i + 1)
+                    a["image_path"] = path
+
+            if not args.json:
+                for i, a in enumerate(articles[:8], 1):
+                    title = (a.get("title") or "").strip()
+                    img = a.get("top_image") or ""
+                    img_path = a.get("image_path") or ""
+                    url = a.get("url") or ""
+                    print(f"\n  {i}. {title}")
+                    if url:
+                        print(f"     {url}")
+                    if img:
+                        print(f"     📷 {img}")
+                    if img_path:
+                        print(f"     💾 saved: {img_path}")
+
+        except Exception as e:
+            print(f"  ERROR: {e}", file=sys.stderr)
+
+    if args.json:
+        print(json.dumps(all_results, indent=2))
+
+if __name__ == "__main__":
+    main()

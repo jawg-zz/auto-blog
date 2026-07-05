@@ -11,6 +11,7 @@ enum SourceType {
   rss
   manual
   ai_generation
+  kenyan_news
 }
 
 enum PostStatus {
